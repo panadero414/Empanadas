@@ -1,0 +1,103 @@
+{
+  "name": "PaginaDatos",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "datos-dashboard",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -304,
+        -160
+      ],
+      "id": "b688684a-1068-4a0e-a2fc-5be8ba39cf74",
+      "name": "Webhook",
+      "webhookId": "c0255558-5e89-4dec-b205-811c88164955"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        112,
+        -160
+      ],
+      "id": "9236bbb1-9b7a-4d24-809e-96362526cf4b",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  -- 1. KPIs (Suma total de empanadas y dinero real)\n  (SELECT COALESCE(SUM(cantidad), 0) FROM pedidos)::text AS \"kpiVolumen\",\n  ('$' || (SELECT COALESCE(SUM(cantidad * 25), 0) FROM pedidos))::text AS \"kpiIngresos\",\n\n  -- 2. GRÁFICA DE VENTAS (Ventas por día)\n  (SELECT COALESCE(json_agg(t), '[]'::json) FROM (\n    SELECT \n      to_char(fecha_pedido, 'Dy') AS name, \n      SUM(cantidad) AS ventas, \n      SUM(cantidad * 15) AS ingresos\n    FROM pedidos \n    GROUP BY name, date_trunc('day', fecha_pedido)\n    ORDER BY date_trunc('day', fecha_pedido) ASC\n  ) t) AS \"dataVentas\",\n\n-- 3. LIVE FEED (Ahora con nombres de clientes)\n  (SELECT COALESCE(json_agg(t), '[]'::json) FROM (\n    SELECT \n      'TX-' || p.id AS id,\n      'Venta' AS tipo,\n      COALESCE(u.nombres_apellidos, p.numero_whatsapp) AS cliente, -- Muestra nombre o el número si no existe\n      '$' || (p.cantidad * 15) AS monto,\n      p.estado_pedido AS status,\n      to_char(p.fecha_pedido, 'HH24:MI') AS time\n    FROM pedidos p\n    LEFT JOIN usuarios u ON p.numero_whatsapp = u.numero_whatsapp \n    ORDER BY p.id DESC LIMIT 5\n  ) t) AS \"actividadReciente\",\n\n  -- 4. COMANDAS COCINA (AQUÍ ESTÁ LA CORRECCIÓN: u.nombres_apellidos)\n  (SELECT COALESCE(json_agg(t), '[]'::json) FROM (\n    SELECT \n      'CMD-' || p.id AS id,\n      to_char(p.fecha_pedido, 'HH24:MI') AS tiempo,\n      COALESCE(u.nombres_apellidos, p.numero_whatsapp) AS cliente, \n      array_to_json(array[p.sabor_empanada]) AS items,\n      'Método: ' || p.metodo_entrega AS notas,\n      (p.estado_pedido = 'En Cola') AS urgente\n    FROM pedidos p\n    LEFT JOIN usuarios u ON p.numero_whatsapp = u.numero_whatsapp \n    WHERE p.estado_pedido = 'En Cola'\n    ORDER BY p.id ASC\n  ) t) AS \"comandasCocina\",\n\n -- 5. RUTAS GPS (Mejorado con nombre de cliente)\n(SELECT COALESCE(json_agg(t), '[]'::json) FROM (\n  SELECT \n    'RT-' || p.id AS id,\n    COALESCE(u.nombres_apellidos, p.numero_whatsapp) AS repartidor, -- Ahora vemos el nombre del cliente\n    p.direccion_gps AS destino,\n    p.estado_pedido AS estado,\n    'Calculando...' AS eta,\n    p.sabor_empanada AS info -- Para saber qué lleva el repartidor\n  FROM pedidos p\n  LEFT JOIN usuarios u ON p.numero_whatsapp = u.numero_whatsapp\n  WHERE p.estado_pedido IN ('Listo', 'En Camino') \n  AND p.metodo_entrega = 'Domicilio' -- Solo lo que sale a ruta\n  ORDER BY p.id ASC\n) t) AS \"rutasActivas\",\n\n  -- 6. STOCK GLOBAL (Inventario real)\n  (SELECT COALESCE(json_agg(t), '[]'::json) FROM (\n    SELECT \n      'INV-' || id AS id,\n      nombre_insumo AS item,\n      stock_actual AS stock,\n      unidad_medida AS unidad,\n      stock_minimo AS umbral,\n      CASE \n        WHEN stock_actual <= stock_minimo THEN 'Crítico'\n        WHEN stock_actual <= (stock_minimo * 1.5) THEN 'Advertencia'\n        ELSE 'Estable'\n      END AS status\n    FROM inventario\n  ) t) AS \"inventarioCompleto\";",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -96,
+        -160
+      ],
+      "id": "d77d5f7c-0b70-4860-9b96-878f0f437400",
+      "name": "Ingreso de datos a la pagina",
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ingreso de datos a la pagina",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingreso de datos a la pagina": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a997c33d-5ab7-4877-93d7-fbfa5bf4f25a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "93038aa79db4a91243cd3830cf896c0e88761d41bb871ed1959cf5ccda8096d0"
+  },
+  "id": "tyvCviklFwwy0NBP",
+  "tags": []
+}

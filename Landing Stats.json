@@ -1,0 +1,186 @@
+{
+  "name": "Landing Stats",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "stats-landing",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "007986d2-8a90-421a-a28d-6f96f6e5f90b",
+      "name": "Webhook",
+      "webhookId": "1d11a8f7-f738-455a-b1c0-83b60dd5fcb1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    (SELECT SUM(cantidad) FROM pedidos) as total_vendidos,\n    (SELECT COUNT(DISTINCT numero_whatsapp) FROM pedidos) as personas_atendidas,\n    (SELECT COUNT(*) FROM pedidos WHERE CAST(opinion_tiempo AS INTEGER) >= 4) as comentarios_positivos,\n    (SELECT COUNT(*) FROM pedidos WHERE CAST(opinion_tiempo AS INTEGER) < 3) as comentarios_negativos,\n    (SELECT COUNT(*) FROM pedidos WHERE tipo_servicio = 'Evento') as eventos_atendidos,\n    (SELECT sabor_empanada FROM pedidos GROUP BY sabor_empanada ORDER BY COUNT(*) DESC LIMIT 1) as mas_popular\nFROM pedidos LIMIT 1;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "f4f48b00-b072-4c93-96c1-37c185b31889",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        800,
+        -80
+      ],
+      "id": "743e7c1f-3a43-4eb1-95c8-03c074f7b423",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT opinion_producto, nombres_apellidos \nFROM pedidos p\nJOIN usuarios u ON p.numero_whatsapp = u.numero_whatsapp\nWHERE opinion_producto IS NOT NULL AND CAST(opinion_tiempo AS INTEGER) >= 4\nORDER BY fecha_pedido DESC LIMIT 3;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        -160
+      ],
+      "id": "7a1e84ea-bdf9-4830-8ff8-ac27ea94e9aa",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        448,
+        -80
+      ],
+      "id": "6a78ec17-298d-4a92-ba56-5c6f04e0c50b",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $('Execute a SQL query').first().json;\nconst reviews = $('Execute a SQL query1').all().map(item => item.json);\n\nreturn [{\n  json: {\n    stats: stats,\n    reviews: reviews\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        -80
+      ],
+      "id": "4e9e2d81-7528-497c-b98d-7ae65d5c2786",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a259c2f0-129f-4f06-aa35-aa88ccf99c76",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "93038aa79db4a91243cd3830cf896c0e88761d41bb871ed1959cf5ccda8096d0"
+  },
+  "id": "MAl4t2sJUjwMt3a6",
+  "tags": []
+}

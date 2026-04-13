@@ -1,0 +1,95 @@
+{
+  "name": "Cocina",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "actualizar-pedido",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "18eca2b1-a35d-4a2f-8e96-44ae049a7842",
+      "name": "Webhook",
+      "webhookId": "65fe5061-f995-46d8-851e-bee8af757d6d"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE pedidos \nSET estado_pedido = 'Listo' \nWHERE id = {{ $json.body.id }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "554b5853-cfaf-43fd-b8d7-bb48f4ddc752",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        416,
+        0
+      ],
+      "id": "9e044996-09db-4afd-953f-b78f180a390d",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1a0c7db4-3bdc-4663-8a64-387a8d941164",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "93038aa79db4a91243cd3830cf896c0e88761d41bb871ed1959cf5ccda8096d0"
+  },
+  "id": "FdJMlHfxnbZYVqBE",
+  "tags": []
+}

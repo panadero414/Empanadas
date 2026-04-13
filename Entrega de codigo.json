@@ -1,0 +1,201 @@
+{
+  "name": "Entrega de codigo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "confirmar-entrega",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        -64
+      ],
+      "id": "ed2016f9-cb51-4ff9-a435-712730cb47b7",
+      "name": "Webhook",
+      "webhookId": "d63c71bd-1d81-4d53-a9e5-63311e6ed7ff"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE pedidos \nSET estado_pedido = 'Entregado' \nWHERE id = {{ $json.body.id }} AND codigo_entrega = '{{ $json.body.codigo }}'\nRETURNING numero_whatsapp;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -256,
+        -64
+      ],
+      "id": "b8250d05-29f8-477e-a4d1-b6971024a758",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"status\": \"ok\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        224,
+        -192
+      ],
+      "id": "948dfc1f-184d-4ec5-96f7-a79e55693cf3",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6081afc9-0609-4241-8438-92788bc58608",
+              "leftValue": "={{ $json.numero_whatsapp }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -32,
+        -64
+      ],
+      "id": "12bbd9c4-af32-4876-800f-76b745e7b624",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"status\": \"error\" }",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        224,
+        48
+      ],
+      "id": "5799817c-fd27-4833-8bf0-21b3708403a2",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1012584745276830",
+        "recipientPhoneNumber": "={{ $('Execute a SQL query').item.json.numero_whatsapp }}",
+        "textBody": "¡Parce, tu pedido ha sido entregado! 🥟 Del 1 al 5, ¿qué tan rápido llegamos?",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        -192
+      ],
+      "id": "515c3450-5beb-4cf5-90e9-e3b7904a39c6",
+      "name": "Send message",
+      "webhookId": "77034bd0-6acc-47d0-91d8-fa97f8e21248",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "xmk7UZqq5D9WrNAb",
+          "name": "WhatsApp account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9d3a4d8e-ceb7-482f-9aa4-5fc377f57b72",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "93038aa79db4a91243cd3830cf896c0e88761d41bb871ed1959cf5ccda8096d0"
+  },
+  "id": "zyTvOuoa2lGHitsl",
+  "tags": []
+}

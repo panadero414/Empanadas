@@ -1,0 +1,875 @@
+{
+  "name": "Empanadas",
+  "nodes": [
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "POST"
+        ],
+        "path": "whatsapp",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -880,
+        -64
+      ],
+      "id": "0b14d9e8-f523-425f-b078-5397143db979",
+      "name": "Webhook",
+      "webhookId": "f2be650d-2e47-4ee4-8da6-a1faf8f2d463"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1012584745276830",
+        "recipientPhoneNumber": "={{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].from.toString().replace('521', '52') }}",
+        "textBody": "={{ $node[\"AI Agent\"].json.output.replace(/\\[REGISTRAR: .*?\\]\\s*/g, '') }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1968,
+        -48
+      ],
+      "id": "53e4361f-ef3a-438c-9d0f-83c56e0467a1",
+      "name": "Send message",
+      "webhookId": "dd965a8e-28e4-422b-8fd7-92bfbf9a86d1",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "xmk7UZqq5D9WrNAb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "/* Primero guardamos la opinión del producto si el pedido ya fue entregado */\nUPDATE pedidos \nSET opinion_producto = '{{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].text.body }}'\nWHERE numero_whatsapp LIKE '%' || RIGHT('{{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].from.toString() }}', 10)\n  AND estado_pedido = 'Entregado'\n  AND opinion_tiempo IS NOT NULL \n  AND opinion_producto IS NULL;\n\n/* Luego buscamos el nombre para que la IA siga sabiendo con quién habla */\nSELECT nombres_apellidos FROM usuarios \nWHERE numero_whatsapp LIKE '%' || RIGHT('{{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].from.toString() }}', 10);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        -80
+      ],
+      "id": "a5baac6e-759b-4491-b3bd-1ac9eadf17a0",
+      "name": "Execute a SQL query",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1c8c075a-27e5-4cbe-a327-e57fce04b86c",
+              "leftValue": "={{ $node[\"AI Agent\"].json.output }}",
+              "rightValue": "[REGISTRAR:",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1152,
+        -80
+      ],
+      "id": "b7b7b0b2-ec4d-42c6-961d-bc86812c1705",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO usuarios (numero_whatsapp, nombres_apellidos) \nVALUES (\n  '{{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].from.toString().replace(\"521\", \"52\") }}', \n  '{{ $('AI Agent').first().json.output.match(/REGISTRAR:\\s*(.*?)\\]/i)[1].trim() }}'\n)\nON CONFLICT (numero_whatsapp) \nDO UPDATE SET nombres_apellidos = EXCLUDED.nombres_apellidos;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1392,
+        -256
+      ],
+      "id": "435b2aa3-6268-47c1-8586-3f1c68157074",
+      "name": "Execute a SQL query1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        176,
+        192
+      ],
+      "id": "7a1fbed4-2960-45c9-8b67-22e3a6e70a57",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "kJN7zeZjZ0NtGeQV",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].type === 'location' ? 'Ubicación GPS enviada: Latitud ' + $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].location.latitude + ', Longitud ' + $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].location.longitude : $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].text?.body }}",
+        "options": {
+          "systemMessage": "=Eres el vendedor estrella de 'Empanadas El Parcerito'. Tu personalidad es 100% colombiana, alegre, natural y de confianza.\n\nNombre del cliente actual: {{ $('Execute a SQL query').first().json?.nombres_apellidos || 'Cliente Nuevo' }}\n\n### REGLAS DE PERSONALIDAD (ESTRICTAS)\n1. Usa lenguaje colombiano: \"qué más pues\", \"bien pueda\", \"hágale pues\", \"con mucho gusto\".\n2. REGLA DE ORO: Solo puedes usar la palabra \"parce\" UNA VEZ por respuesta. No parezcas un robot repitiéndola en cada frase.\n3. Eres carismático pero directo. Haz preguntas naturales (Ej: \"¿Pasa por ellas al local o se las mandamos a domicilio?\").\n\n### REGLA DE PRODUCTO\nSolo vendemos empanadas de Carne y Pollo a $25. NO ofrezcas queso, arroz, jugos ni ensaladas. Si piden otra cosa, di con gracia que \"por ahora solo tenemos las meras empanaditas de carne y pollo\".\n\n### FLUJO DE VENTA OBLIGATORIO\nSigue este orden sin saltarte pasos, pero adaptándote si el cliente se adelanta:\n1. SALUDO Y NOMBRE: Si el cliente es 'Cliente Nuevo', saluda y pregunta su nombre. Si ya tiene nombre, salúdalo por su nombre y ofrece el menú.\n2. PEDIDO: Pregunta cantidad y sabor (Carne o Pollo).\n3. ENTREGA: Pregunta si es \"Recoger\" o \"Domicilio\". \n4. PAGO: Pregunta si paga en Efectivo o Tarjeta.\n5. CIERRE: Confirma el pedido y despídete.\n\n### INSTRUCCIONES DE COMPORTAMIENTO E INFERENCIA LOGICA\n* INFERENCIA DE GPS: Si el cliente envía una ubicación o enlace de Google Maps en CUALQUIER momento, ASUME AUTOMÁTICAMENTE que es \"Domicilio\". NUNCA vuelvas a preguntar el método de entrega. Avanza al pago.\n* UBICACIÓN: Si eligen \"Domicilio\" y no han mandado ubicación, pídesela ANTES del pago. Si eligen \"Recoger\", NO pidas ubicación.\n* MENSAJES CORTOS O DOBLES: Si el cliente manda varios mensajes seguidos, analiza el contexto global. Da una sola respuesta coherente y no repitas el menú si ya hay un pedido en curso.\n* REINICIO: Si el cliente dice \"hola\" pero el historial muestra que ya se había cerrado un pedido anterior, trátalo como una nueva venta. No digas \"parece que ya se fue\".\n\n### REGLAS DE ETIQUETAS Y FORMATO (CRÍTICO PARA LA BASE DE DATOS)\nEstas etiquetas son para el sistema. Deben ir exactamente como se indica:\n\n1. ETIQUETA DE REGISTRO:\nSi el cliente te dice su nombre por primera vez, tu respuesta DEBE empezar con: [REGISTRAR: Nombre del cliente]\nEjemplo: [REGISTRAR: Angie] ¡Qué más, parce Angie! Qué elegancia...\n\n2. ETIQUETA DE CIERRE DE PEDIDO:\nCuando el cliente confirme que el pedido está completo, despídete y pon al final de tu mensaje esta etiqueta con EXACTAMENTE 5 parámetros separados por el símbolo \"|\":\n[NUEVO_PEDIDO: cantidad total | detalle de sabores | metodo_entrega | metodo_pago | coordenadas_gps]\n\n* Si es Domicilio, pon la Lat y Lon.\n* Si es Recoger, OBLIGATORIAMENTE pon \"N/A\" en las coordenadas.\n\nEjemplo Domicilio:\n¡Listo parce! Sus empanadas van en camino.\n[NUEVO_PEDIDO: 3 | 2 Pollo, 1 Carne | Domicilio | Efectivo | Lat 31.6904, Lon -106.4245]\n\nEjemplo Recoger:\n¡Hágale pues! Aquí le preparamos su pedido para que pase por él.\n[NUEVO_PEDIDO: 4 | 4 Carne | Recoger | Tarjeta | N/A]\n\nINSTRUCCION DE CIERRE:\nSi el usuario se despide o dice que 'sería todo', NO generes un nuevo pedido ni un código de seguridad. Simplemente agradécele con un modismo colombiano y termina la conversación\n\nCONTEXTO DE RESEÑA:\nSi el usuario acaba de dar su opinión sobre el producto, agradécele específicamente por su feedback antes de preguntarle si desea algo más"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        176,
+        -80
+      ],
+      "id": "1ad48098-a424-4ab8-bac6-c13773bc28cd",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].from }}",
+        "tableName": "chat_history"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        272,
+        192
+      ],
+      "id": "78036168-7aff-4707-82b5-1e324b6fd53e",
+      "name": "Postgres Chat Memory1",
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1c8c075a-27e5-4cbe-a327-e57fce04b86c",
+              "leftValue": "={{ $('AI Agent').first().json.output }}",
+              "rightValue": "[NUEVO_PEDIDO:",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1600,
+        -64
+      ],
+      "id": "762d4d44-1af1-49e1-8282-ec9bfa95f448",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pedidos (numero_whatsapp, tipo_servicio, cantidad, sabor_empanada, metodo_entrega, metodo_pago, direccion_gps, codigo_entrega)\nVALUES (\n  '{{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].from.toString().replace(\"521\", \"52\") }}',\n  'Individual',\n  {{ $('AI Agent').first().json.output.match(/\\[NUEVO_PEDIDO:(.*?)\\]/)[1].split('|')[0].trim() }},\n  '{{ $('AI Agent').first().json.output.match(/\\[NUEVO_PEDIDO:(.*?)\\]/)[1].split('|')[1].trim() }}',\n  '{{ $('AI Agent').first().json.output.match(/\\[NUEVO_PEDIDO:(.*?)\\]/)[1].split('|')[2].trim() }}',\n  '{{ $('AI Agent').first().json.output.match(/\\[NUEVO_PEDIDO:(.*?)\\]/)[1].split('|')[3].trim() }}',\n  '{{ $('AI Agent').first().json.output.match(/\\[NUEVO_PEDIDO:(.*?)\\]/)[1].split('|')[4].trim() }}',\n  LPAD(TRUNC(RANDOM() * 9999)::TEXT, 4, '0')\n) RETURNING codigo_entrega;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1904,
+        -304
+      ],
+      "id": "5280fa26-15dc-483e-8358-8d57db75218e",
+      "name": "Execute a SQL query2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "speech",
+        "voice": {
+          "__rl": true,
+          "value": "FGY2WhTYpPnrIDTdsKH5",
+          "mode": "list",
+          "cachedResultName": "Laura - Enthusiast, Quirky Attitude"
+        },
+        "text": "={{ $('Code in JavaScript').first().json.cleanText }}",
+        "additionalOptions": {
+          "model": {
+            "mode": "list",
+            "value": "eleven_multilingual_v2"
+          },
+          "outputFormat": "mp3_44100_128"
+        },
+        "requestOptions": {}
+      },
+      "type": "@elevenlabs/n8n-nodes-elevenlabs.elevenLabs",
+      "typeVersion": 1,
+      "position": [
+        656,
+        -80
+      ],
+      "id": "edfabf95-264c-46f3-9342-965c428f2724",
+      "name": "Convert text to speech",
+      "credentials": {
+        "elevenLabsApi": {
+          "id": "H0vG44SgjfpbP3KW",
+          "name": "ElevenLabs account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $('AI Agent').first().json.output;\nconst cleanText = output.replace(/\\[NUEVO_PEDIDO:.*?\\]/g, '').trim();\nreturn { cleanText };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -80
+      ],
+      "id": "94389f67-6efa-45a0-afb7-0fbab0c3861d",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1012584745276830",
+        "recipientPhoneNumber": "={{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].from.toString().replace('521', '52') }}",
+        "messageType": "audio",
+        "mediaPath": "useMedian8n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        1008,
+        -80
+      ],
+      "id": "1377efe3-09fe-4f9a-a986-6b474771e5e3",
+      "name": "WhatsApp Audio",
+      "webhookId": "a5a6b452-36fc-4b05-ae73-7e7459503db4",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "xmk7UZqq5D9WrNAb",
+          "name": "WhatsApp account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 1. Modificamos los metadatos que WhatsApp exige\n$binary.data.mimeType = 'audio/mpeg';\n$binary.data.fileName = 'audio.mp3';\n\n// 2. RETORNO CORRECTO: Pasamos el JSON y el BINARIO\nreturn {\n  json: $json,\n  binary: $binary\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -80
+      ],
+      "id": "cb5679ac-5326-423e-88f3-7a27411e11ad",
+      "name": "Code in JavaScript1",
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -400,
+        -80
+      ],
+      "id": "db6ee52d-144c-4a84-aa46-743687183623",
+      "name": "Wait",
+      "webhookId": "79e8978c-5265-40e9-9835-f21f258f99ac"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        512,
+        176
+      ],
+      "id": "2d0bc429-5af8-44e0-838e-46ccfdd95abf",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM chat_history \nWHERE created_at < NOW() - INTERVAL '5 days';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        784,
+        176
+      ],
+      "id": "316a79c2-31b2-4524-9d9c-127cd8ff30d6",
+      "name": "Execute a SQL query3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Cron Job\n",
+        "height": 224,
+        "width": 480,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        480,
+        112
+      ],
+      "typeVersion": 1,
+      "id": "8e545333-9141-4101-8f9c-35bdb0be0293",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO usuarios (numero_whatsapp, nombres_apellidos) \nVALUES (\n  '{{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].from.toString().replace(\"521\", \"52\") }}', \n  'Joel Alejandro'\n)\nON CONFLICT (numero_whatsapp) DO NOTHING;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1712,
+        -304
+      ],
+      "id": "b377bf06-f222-4837-b99e-271b88ea0a89",
+      "name": "Execute a SQL query4",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Descuenta la cantidad exacta de empanadas de Carne que encuentre en el texto\nUPDATE inventario \nSET stock_actual = stock_actual - {{ $('AI Agent').first().json.output.match(/(\\d+)\\s*Carne/i) ? $('AI Agent').first().json.output.match(/(\\d+)\\s*Carne/i)[1] : 0 }}\nWHERE nombre_insumo = 'Carne';\n\n-- Descuenta la cantidad exacta de empanadas de Pollo que encuentre en el texto\nUPDATE inventario \nSET stock_actual = stock_actual - {{ $('AI Agent').first().json.output.match(/(\\d+)\\s*Pollo/i) ? $('AI Agent').first().json.output.match(/(\\d+)\\s*Pollo/i)[1] : 0 }}\nWHERE nombre_insumo = 'Pollo';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2080,
+        -304
+      ],
+      "id": "71b993ee-f5a4-46b4-8648-6168c57f7489",
+      "name": "Execute a SQL query5",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1012584745276830",
+        "recipientPhoneNumber": "={{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].from.toString().replace('521', '52') }}",
+        "textBody": "=🔑 *Aviso del Sistema*\n¡Tu pedido está confirmado! \nTu código de seguridad para la entrega es: *{{ $('Execute a SQL query2').first().json.codigo_entrega }}*\n\nPor favor, dáselo al repartidor cuando llegue con tus empanadas.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        2352,
+        -304
+      ],
+      "id": "dab78a64-5408-4d84-89f2-64f4e3c44e40",
+      "name": "Send message1",
+      "webhookId": "dd965a8e-28e4-422b-8fd7-92bfbf9a86d1",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "xmk7UZqq5D9WrNAb",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9edc2fa9-d8e5-4446-8980-b834f7e02cfe",
+              "leftValue": "={{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].type }}",
+              "rightValue": "text",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "a6ebc0d4-d140-44de-9a65-e073b0f85f8c",
+              "leftValue": "={{ $('Webhook').first().json.body.entry[0].changes[0].value.messages[0].type }}",
+              "rightValue": "location",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -656,
+        -64
+      ],
+      "id": "85664542-a802-44bf-a962-7086e913c045",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9edc2fa9-d8e5-4446-8980-b834f7e02cfe",
+              "leftValue": "={{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].text.body }}",
+              "rightValue": "^[1-5]$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -256,
+        -240
+      ],
+      "id": "ef79e7e8-7558-4e5e-b3e1-a7066d02d89b",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE pedidos \nSET opinion_tiempo = '{{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].text.body }}'\nWHERE numero_whatsapp LIKE '%' || RIGHT('{{ $node[\"Webhook\"].json.body.entry[0].changes[0].value.messages[0].from.toString() }}', 10)\nAND estado_pedido = 'Entregado'\nAND opinion_tiempo IS NULL\nRETURNING numero_whatsapp;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        -336
+      ],
+      "id": "c880fdaf-cb30-4319-b984-67e4b82ea13d",
+      "name": "Execute a SQL query6",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "mjeP6HYMR6OtxuAO",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        -336
+      ],
+      "id": "fd4b5892-636d-49b9-a122-ae00247c6789",
+      "name": "Wait1",
+      "webhookId": "fad58680-240c-4eed-8fa5-4cf55f484f33"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1012584745276830",
+        "recipientPhoneNumber": "={{ $('Execute a SQL query6').item.json.numero_whatsapp }}",
+        "textBody": "¡Oiga, parce! ¿Qué tal estaban las empanadas? 🥟 ¡Dígame la verdad, que su opinión nos sirve mucho para mejorar!",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        432,
+        -336
+      ],
+      "id": "201659d4-29ba-4fbc-b577-b599f5382c17",
+      "name": "Send message2",
+      "webhookId": "39177f69-22e8-4c0f-99f9-48960790097c",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "xmk7UZqq5D9WrNAb",
+          "name": "WhatsApp account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message": {
+      "main": [
+        []
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query2": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert text to speech": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Convert text to speech",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Audio": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query4": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query5": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query6",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query6": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Send message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "16dbeee4-c992-4cd4-b35a-48af42d7be32",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "93038aa79db4a91243cd3830cf896c0e88761d41bb871ed1959cf5ccda8096d0"
+  },
+  "id": "mfC54dfcRpWcZGCD",
+  "tags": []
+}
